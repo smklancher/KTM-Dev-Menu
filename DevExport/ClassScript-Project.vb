@@ -144,6 +144,12 @@ Public Sub DevMenu_Show(Optional pXFolder As CscXFolder=Nothing, Optional pXDoc 
 
    If Not IsDesignMode() Then Exit Sub
 
+   ' Keep an exported copy of the project script updated.
+   ' Called via eval and ignoring errors so this will work if it is in the project, and no error if it is not.
+   On Error Resume Next
+   Eval("Dev_ExportScriptAndLocators()")
+   On Error GoTo 0
+
    Debug.Clear
    Dim Choices(1000) As String, Choice As Integer, Items As Dictionary
    Set Items=DevMenu_Items()
@@ -222,8 +228,14 @@ Public Sub DevMenu_Execute(sf As ScriptFunction, Optional pXFolder As CscXFolder
                Set Param1=pXFolder
             Else
                If Not pXDoc Is Nothing Then
-                  Debug.Print("Executing function using parent folder of xdoc.")
-                  Set Param1=pXDoc.ParentFolder 'This might not be valid for a function that tries to modify the folder
+                  Debug.Print("Executing function using parent folder of xdoc (overriding single-document mode and folder access permissions).")
+                  ' Normally if you go to the parent folder from a doc level event, then back down through the xdocinfos to the xdocs,
+                  ' that would result in an error saying that it is not currently possible to access documents.
+                  ' Disabling single doc mode will allow access to the xdocs
+                  ' These commands are unsupported and have high potential to cause problems: They should never be touched at runtime.
+                  pXDoc.ParentFolder.SetSingleDocumentMode(False)
+                  pXDoc.ParentFolder.SetFolderAccessPermission(255)
+                  Set Param1=pXDoc.ParentFolder
                End If
             End If
       End Select
@@ -284,61 +296,65 @@ End Function
 
 ' Functions to test from DevMenu
 
-Public Sub ExportPagesAsTiffs(pXDoc As CscXDocument)
-   Dim fso As New FileSystemObject
-   Dim ExportPath As String
-   ExportPath=Project.ScriptVariables("ExportPath")
-
-   If Not fso.FolderExists(ExportPath) Then ExportPath=fso.BuildPath(fso.GetFile(Project.FileName).ParentFolder, "ExportedImages")
-   If Not fso.FolderExists(ExportPath) Then fso.CreateFolder(ExportPath)
-
-   ' Create a folder for this document named by the filename of the first source file
-   Dim DocName As String
-   DocName=fso.GetBaseName(pXDoc.CDoc.SourceFiles(0).FileName)
-   ExportPath=fso.BuildPath(ExportPath,DocName)
-   If Not fso.FolderExists(ExportPath) Then fso.CreateFolder(ExportPath)
-
-   Debug.Print("Exporting " & pXDoc.CDoc.Pages.Count & " pages from document # " & pXDoc.IndexInFolder+1 & " (" & DocName & ")")
-   Dim PageIndex As Integer
-   For PageIndex=0 To pXDoc.CDoc.Pages.Count-1
-      If (PageIndex+1) Mod 10 = 0 Then Debug.Print("  Processing page " & PageIndex + 1 & "/" & pXDoc.CDoc.Pages.Count & " from document # " & pXDoc.IndexInFolder+1 & " (" & DocName & ")")
-      pXDoc.CDoc.Pages(PageIndex).GetImage().Save(fso.BuildPath(ExportPath,DocName & "-Page-" & Format(PageIndex+1,"000") & ".tif"),CscImgFileFormatTIFFOJPG)
-      pXDoc.CDoc.Pages(PageIndex).UnloadImage()
+Public Sub FolderAsTiffs(pXFolder As CscXFolder)
+   Dim DocIndex As Integer
+   For DocIndex=0 To pXFolder.GetTotalDocumentCount()-1
+      Debug.Print("Executing on document " & DocIndex+1 & "/" & pXFolder.DocInfos.Count())
+      ExportDocAsMultipageTiffs(pXFolder.DocInfos(DocIndex).XDocument)
    Next
-   Debug.Print("Finished " & pXDoc.CDoc.Pages.Count & " pages from document # " & pXDoc.IndexInFolder+1 & " (" & DocName & ")")
 End Sub
 
-Public Sub ExportPagesAsMultipageTiff(pXDoc As CscXDocument)
-   ' Saves a doc as a multipage tiff
+Public Sub ExportDocAsIndividualTiffs(pXDoc As CscXDocument)
+   ExportDocAsTiff(pXDoc, GetExportPath(), False)
+End Sub
+
+Public Sub ExportDocAsMultipageTiffs(pXDoc As CscXDocument)
+   ExportDocAsTiff(pXDoc, GetExportPath(), True)
+End Sub
+
+Public Function GetExportPath() As String
    Dim fso As New FileSystemObject
    Dim ExportPath As String
    ExportPath=Project.ScriptVariables("ExportPath")
 
    If Not fso.FolderExists(ExportPath) Then ExportPath=fso.BuildPath(fso.GetFile(Project.FileName).ParentFolder, "ExportedImages")
    If Not fso.FolderExists(ExportPath) Then fso.CreateFolder(ExportPath)
+   Return ExportPath
+End Function
 
-   ' Multipage document named by the filename of the first source file
+Public Sub ExportDocAsTiff(pXDoc As CscXDocument, ExportPath As String, Optional MultiPage As Boolean=True)
+   Dim fso As New FileSystemObject
    Dim DocName As String, TempPath As String, TiffPath As String
    DocName=fso.GetBaseName(pXDoc.CDoc.SourceFiles(0).FileName)
-   TiffPath=fso.BuildPath(ExportPath,DocName & ".tif")
-   TempPath=TiffPath & ".tmp"
+   If MultiPage Then
+      ' Multipage document named by the filename of the first source file
+      TiffPath=fso.BuildPath(ExportPath,DocName & ".tif")
+      TempPath=TiffPath & ".tmp"
+   Else
+      ' Create a folder for this document named by the filename of the first source file
+      ExportPath=fso.BuildPath(ExportPath,DocName)
+      If Not fso.FolderExists(ExportPath) Then fso.CreateFolder(ExportPath)
+   End If
+
 
    Debug.Print("Exporting " & pXDoc.CDoc.Pages.Count & " pages from document # " & pXDoc.IndexInFolder+1 & " (" & DocName & ")")
    Dim PageIndex As Integer, img As CscImage, imgformat As CscImageFileFormat
    For PageIndex=0 To pXDoc.CDoc.Pages.Count-1
       If (PageIndex+1) Mod 10 = 0 Then Debug.Print("  Processing page " & PageIndex + 1 & "/" & pXDoc.CDoc.Pages.Count & " from document # " & pXDoc.IndexInFolder+1 & " (" & DocName & ")")
-      Set img=pXDoc.CDoc.Pages(PageIndex).GetImage()
-      imgformat=IIf(img.BitsPerSample=1 And img.SamplesPerPixel=1,CscImageFileFormat.CscImgFileFormatTIFFFaxG4,CscImageFileFormat.CscImgFileFormatTIFFOJPG)
 
-      img.StgFilterControl(imgformat, CscStgControlOptions.CscStgCtrlTIFFKeepFileOpen, TempPath, 0, 0)
-      img.StgFilterControl(imgformat, CscStgControlOptions.CscStgCtrlTIFFKeepExistingPages, TempPath, 0, 0)
-      img.Save(TempPath, imgformat)
-
-
-      pXDoc.CDoc.Pages(PageIndex).UnloadImage()
+      If MultiPage Then
+         Set img=pXDoc.CDoc.Pages(PageIndex).GetImage()
+         imgformat=IIf(img.BitsPerSample=1 And img.SamplesPerPixel=1,CscImageFileFormat.CscImgFileFormatTIFFFaxG4,CscImageFileFormat.CscImgFileFormatTIFFOJPG)
+         img.StgFilterControl(imgformat, CscStgControlOptions.CscStgCtrlTIFFKeepFileOpen, TempPath, 0, 0)
+         img.StgFilterControl(imgformat, CscStgControlOptions.CscStgCtrlTIFFKeepExistingPages, TempPath, 0, 0)
+         img.Save(TempPath, imgformat)
+      Else
+         pXDoc.CDoc.Pages(PageIndex).GetImage().Save(fso.BuildPath(ExportPath,DocName & "-Page-" & Format(PageIndex+1,"000") & ".tif"),CscImgFileFormatTIFFOJPG)
+         pXDoc.CDoc.Pages(PageIndex).UnloadImage()
+      End If
    Next
 
-   If pXDoc.CDoc.Pages.Count>0 Then
+   If MultiPage And pXDoc.CDoc.Pages.Count>0 Then
       ' Close the multipage tiff file that was kept open
       Set img=pXDoc.CDoc.Pages(0).GetImage()
       img.StgFilterControl(CscImageFileFormat.CscImgFileFormatTIFFFaxG4, CscStgControlOptions.CscStgCtrlTIFFCloseFile, TempPath, 0, 0)
@@ -351,6 +367,8 @@ Public Sub ExportPagesAsMultipageTiff(pXDoc As CscXDocument)
 
    Debug.Print("Finished " & pXDoc.CDoc.Pages.Count & " pages from document # " & pXDoc.IndexInFolder+1 & " (" & DocName & ")")
 End Sub
+
+
 
 Private Sub Batch_Open(ByVal pXRootFolder As CASCADELib.CscXFolder)
    ' Invoke DevMenu by testing the Batch_Open function (lightning bolt)
