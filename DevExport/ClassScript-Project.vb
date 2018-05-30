@@ -17,8 +17,8 @@ Type ScriptFunction
    Name As String
    IsSub As Boolean
    Params() As Param
-   StartIndex As Integer
-   EndIndex As Integer
+   StartIndex As Long
+   EndIndex As Long
    Content As String
    ClassName As String
    ReturnType As String
@@ -97,7 +97,7 @@ Public Function ParseScript(ByVal Script As String, Optional ByVal ClassName As 
    r.Pattern = "^(?:Public |Private )?(Sub|Function) (.*?)\((.*?)\)\s*(?: As (.+?))?$((?:.|\n)*?)End \1"
    Set Matches = r.Execute(Script)
 
-   Dim MatchIndex As Integer, sf As ScriptFunction, ScriptFunctions As New Dictionary
+   Dim MatchIndex As Long, sf As ScriptFunction, ScriptFunctions As New Dictionary
    For MatchIndex=0 To Matches.Count-1
       sf=NewScriptFunction(Matches(MatchIndex))
       sf.ClassName=ClassName
