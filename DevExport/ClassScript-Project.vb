@@ -61,7 +61,7 @@ Public Function NewParams(ParamString As String) As Param()
 
    Dim r As New RegExp, Matches As MatchCollection
    r.Global=True:   r.Multiline=True:   r.IgnoreCase=True
-   r.Pattern = "(Optional *?)?(ByVal|ByRef)? *(\w+?)(\( *\))?(?: As ([\w\.]+?)) *(?:= *(.*?))?(?:,|$)"
+   r.Pattern = "(Optional *?)?(ByVal|ByRef|ParamArray)? *(\w+?)([\$\%\?\&\@\!\#])?(\( *\))?(?: As ([\w\.]+?))? *(?:= *(.*?))?(?:,|$)"
    Set Matches = r.Execute(ParamString)
 
    If Matches.Count>0 Then
@@ -81,10 +81,31 @@ Public Function NewParam(m As Match) As Param
    With NewParam
       .OptionalParam=Len(Trim(m.SubMatches(0)))>0
       .Name=m.SubMatches(2)
-      .Array=Len(Trim(m.SubMatches(3)))>0
-      .ParamType=m.SubMatches(4)
-      .DefaultValue=m.SubMatches(5)
+      .Array=Len(Trim(m.SubMatches(4)))>0
+      .ParamType=m.SubMatches(5)
+      .DefaultValue=m.SubMatches(6)
    End With
+
+   If InStr(1,m.SubMatches(1),"ParamArray") Then NewParam.OptionalParam=True
+
+   'Variable type as "Name$" instead of "Name As String"
+   Select Case m.SubMatches(3)
+      Case "%"
+         NewParam.ParamType="Integer"
+      Case "&"
+         NewParam.ParamType="Long"
+      Case "@"
+         NewParam.ParamType="Decimal"
+      Case "!"
+         NewParam.ParamType="Single"
+      Case "#"
+         NewParam.ParamType="Double"
+      Case "$"
+         NewParam.ParamType="String"
+      Case "?"
+         NewParam.ParamType="PortInt"
+   End Select
+
 End Function
 
 
@@ -101,7 +122,7 @@ Public Function ParseScript(ByVal Script As String, Optional ByVal ClassName As 
    Dim r As New RegExp, Matches As MatchCollection
    r.Global=True:   r.Multiline=True:   r.IgnoreCase=True
    'vbscript regexp does not support singleline mode (. matches \n) and no support for named capturing groups
-   r.Pattern = "^(?:Public |Private )?(Sub|Function) (.*?)\((.*?)\)\s*(?: As (.+?))?$((?:.|\n)*?)End \1"
+   r.Pattern = "^(?:Public |Private )?(Sub|Function) (.*?)\((.*[^\(])?\)\s*(?: As (.+?))?$((?:.|\n)*?)End \1"
    Set Matches = r.Execute(Script)
    Dim SFs() As ScriptFunction
 
@@ -501,7 +522,7 @@ Public Function TestScriptFunctions(Optional NameFilter As String) As String
          If UBound(sf.Params)>-1 Then sfline=Mid(sfline,1,Len(sfline)-2)
          sfline=sfline & ")" & IIf(Len(sf.ReturnType)>0, " As " & sf.ReturnType, "") & IIf(Len(sf.StringTag)>0," [Tag: " & sf.StringTag & "]", "")
          Debug.Print(sfline)
-         msg=sfline & vbNewLine
+         msg=msg & sfline & vbNewLine
       End If
    Next
 
