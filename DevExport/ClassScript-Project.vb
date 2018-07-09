@@ -143,6 +143,7 @@ Public Function ParseScript(ByVal Script As String, Optional ByVal ClassName As 
 End Function
 
 
+
 Public Function DevMenu_FilteredFunctions(InputFunctions() As ScriptFunction, ByRef Filtered() As ScriptFunction, Optional IncludeFolder As Boolean=True, Optional IncludeDoc As Boolean=True, Optional IncludeOther As Boolean=True, Optional ContainsStr As String="") As String()
    ' Out variable Filtered provides a filtered array of ScriptFunctions, function returns array of strings corresponding to the function names to use in a menu/dropdown
 
@@ -204,6 +205,12 @@ Public Sub DevMenu_Dialog(Optional pXFolder As CscXFolder=Nothing, Optional pXDo
    Dim FuncNames() As String
    FuncNames=DevMenu_FilteredFunctions(AllFunc,FilteredFunc)
 
+   Dim ParentFunction As String
+   ParentFunction="parent function"
+   On Error Resume Next
+   ParentFunction = Mid(CallersLine(0),InStr(1,CallersLine(0),"|")+1,InStr(1,CallersLine(0),"#")-InStr(1,CallersLine(0),"|")-1)
+   On Error GoTo 0
+
    ' collect function name prefixes before an underscore to use as preset filter groups
    Dim Prefixes(1000) As String, CurPf As String, Pre As New Dictionary, sf As ScriptFunction
    Prefixes(Pre.Count)="Show All" : Pre.Add("Show All","Show All")
@@ -235,7 +242,7 @@ Public Sub DevMenu_Dialog(Optional pXFolder As CscXFolder=Nothing, Optional pXDo
       TextBox 210,21,130,21,.CustomFilter
       PushButton 330,56,90,21,"Execute",.Execute
       OKButton 530,42,90,21
-      PushButton 460,56,170,21,"Continue parent function",.ContinueParentEvent
+      PushButton 460,56,170,21,"Continue " & ParentFunction,.ContinueParentEvent
    End Dialog
 
    Dim dlg As DevDialog
@@ -277,9 +284,6 @@ Public Sub DevMenu_ActiveContext(SetActiveVars As Boolean,ByRef pXFolder As CscX
    End If
 End Sub
 
-Public Sub DevMenu_DialogInitialize()
-
-End Sub
 
 Public Sub DevMenu_DialogUpdate(AllFunc() As ScriptFunction, ByRef FilteredFunc() As ScriptFunction, ByRef FuncNames() As String, ByRef FilterStr As String, ByRef ScriptStatus As String)
    FilterStr=IIf(DlgValue("FunctionNameFilter")=0,"",IIf(DlgValue("FunctionNameFilter")=1,DlgText("CustomFilter"),DlgText("FunctionNameFilter")))
@@ -611,7 +615,10 @@ End Sub
 
 Private Sub Batch_Open(ByVal pXRootFolder As CASCADELib.CscXFolder)
    ' Invoke DevMenu by testing the Batch_Open function (lightning bolt)
+   ' This menu will only open when executed at design time, so it can be left in a project.
    DevMenu_Dialog(pXRootFolder)
+   ' When closing the menu, script execution will end unless clicking the "Continue
+   ' [Parent Event]" button, thus retaining the ability to test this event only when intended.
 End Sub
 
 
