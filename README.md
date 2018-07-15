@@ -4,7 +4,12 @@ Dynamic menu for use in KTM Project Builder and KTA Transformation Designer to a
 
 ![DevMenu](Images/DevMenu.png)
 
-## Opening the Menu
+## tl;dr
+
+* KTM: Open a test set in hierarchy mode and test the Batch_Open event to open the menu to run folder functions.
+* KTM/KTA: Extract a document as the class DocDevMenu to open the menu to run document functions.
+
+## Folder Mode vs Document Mode
 
 It is important to understand that Project Builder does not directly provide a way to run arbitrary script.  We use existing events to launch the menu, which is easy to do, but requires a bit of explanation.  It should be invoked from a folder level event for functions that need a folder parameter, a document level event for functions that need a parameter, or either for functions that do not need either.
 
@@ -37,7 +42,11 @@ Private Sub Document_BeforeExtract(ByVal pXDoc As CASCADELib.CscXDocument)
 End Sub
 ```
 
-If executing a folder function (first paremeter is an CscXFolder), it will be run on the doc's parent folder, however it is possible that some operations will not work properly when using the parent folder from a document event.  KTA lacks the batch level events to provide a folder directly, so this is the only way to run functions that require a folder.
+#### Parent Folder
+
+If executing a folder function (first paremeter is an CscXFolder), it will be run on the doc's parent folder, however this will not change the fact that structural changes cannot be made from a document event.  So while this approach can be used to run a function that reads from all documents in the folder, it cannot be used to do tasks like merge documents.
+
+The reason this limitation is notable is that KTA TD lacks the batch level events to provide a folder directly, so this is the only way to run functions that require a folder.  Thus, functions that make structural changes, like [KTM Separation Testing](https://github.com/smklancher/KTM-Separation-Testing), cannot be used in KTA TD.
 
 ## Implementation Details
 
